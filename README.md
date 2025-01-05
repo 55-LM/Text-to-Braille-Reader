@@ -16,3 +16,7 @@ The next objective of this project is to prototype this device using 30 solenoid
 5. 6 1N4001 Rectifier Diodes - 1A 50V
 
 ## Circuit Schematic 
+<div align="center">
+  <img src="./CircuitSchematic1.png" />
+</div>
+<br/>
