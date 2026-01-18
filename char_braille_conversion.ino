@@ -1,35 +1,25 @@
-// Pin definitions for solenoids
-const int solenoidPins[6] = {2, 3, 4, 5, 6, 7}; // Pins for 6 Braille dots
+const int solenoidPins[30] = {
+  2, 3, 4, 5, 6, 7,
+  8, 9, 10, 11, 12, 13,
+  14, 15, 16, 17, 18, 19,
+  20, 21, 22, 23, 24, 25,
+  26, 27, 28, 29, 30, 31
+};
 
-void setup() {
-  // Initialize serial communication
-  Serial.begin(9600);
-  
-  // Set solenoid pins as outputs
-  for (int i = 0; i < 6; i++) {
-    pinMode(solenoidPins[i], OUTPUT);
-    digitalWrite(solenoidPins[i], LOW); // Initialize solenoids to off
-  }
-}
+const int buttonPin = 32;
 
-void loop() {
-  // Check if there's data available from the serial connection
-  if (Serial.available() > 0) {
-    char receivedChar = Serial.read(); // Read the sent character 
-    Serial.println(receivedChar);     
+char msg[256];
+int msgLen = 0;
+int offsetIndex = 0;
 
-    // Get the Braille pattern for recieved char
-    int braillePattern = getBraillePattern(receivedChar);
+int buttonState = HIGH;
+int lastButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 35;
 
-    // Activate the corresponding solenoids
-    activateBrailleDots(braillePattern);
-  }
-}
-
-// Function to map characters to Braille patterns
 int getBraillePattern(char c) {
+  if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
   switch (c) {
-    // Lowercase letters
     case 'a': return 0b000001;
     case 'b': return 0b000011;
     case 'c': return 0b000101;
@@ -56,56 +46,88 @@ int getBraillePattern(char c) {
     case 'x': return 0b100101;
     case 'y': return 0b100111;
     case 'z': return 0b100110;
-
-    // Uppercase letters (dot-7 as uppercase indicator)
-    case 'A': return 0b100000 | getBraillePattern('a');
-    case 'B': return 0b100000 | getBraillePattern('b');
-    case 'C': return 0b100000 | getBraillePattern('c');
-    case 'D': return 0b100000 | getBraillePattern('d');
-    case 'E': return 0b100000 | getBraillePattern('e');
-    case 'F': return 0b100000 | getBraillePattern('f');
-    case 'G': return 0b100000 | getBraillePattern('g');
-    case 'H': return 0b100000 | getBraillePattern('h');
-    case 'I': return 0b100000 | getBraillePattern('i');
-    case 'J': return 0b100000 | getBraillePattern('j');
-    case 'K': return 0b100000 | getBraillePattern('k');
-    case 'L': return 0b100000 | getBraillePattern('l');
-    case 'M': return 0b100000 | getBraillePattern('m');
-    case 'N': return 0b100000 | getBraillePattern('n');
-    case 'O': return 0b100000 | getBraillePattern('o');
-    case 'P': return 0b100000 | getBraillePattern('p');
-    case 'Q': return 0b100000 | getBraillePattern('q');
-    case 'R': return 0b100000 | getBraillePattern('r');
-    case 'S': return 0b100000 | getBraillePattern('s');
-    case 'T': return 0b100000 | getBraillePattern('t');
-    case 'U': return 0b100000 | getBraillePattern('u');
-    case 'V': return 0b100000 | getBraillePattern('v');
-    case 'W': return 0b100000 | getBraillePattern('w');
-    case 'X': return 0b100000 | getBraillePattern('x');
-    case 'Y': return 0b100000 | getBraillePattern('y');
-    case 'Z': return 0b100000 | getBraillePattern('z');
-
-    // Default: Unsupported character
+    case ' ': return 0b000000;
     default: return 0b000000;
   }
 }
 
-// Function to activate solenoids based on the Braille pattern
-void activateBrailleDots(int pattern) {
-  for (int i = 0; i < 6; i++) {
-    if (pattern & (1 << i)) {
-      digitalWrite(solenoidPins[i], HIGH); // Activate solenoid
-    } else {
-      digitalWrite(solenoidPins[i], LOW);  // Deactivate solenoid
+void showWindow() {
+  for (int cell = 0; cell < 5; cell++) {
+    int pattern = 0;
+    int idx = offsetIndex + cell;
+    if (idx >= 0 && idx < msgLen) pattern = getBraillePattern(msg[idx]);
+    for (int dot = 0; dot < 6; dot++) {
+      int pinIndex = cell * 6 + dot;
+      digitalWrite(solenoidPins[pinIndex], (pattern & (1 << dot)) ? HIGH : LOW);
     }
   }
-  delay(1000); // Hold the Braille display for 1 second
-  clearBrailleDisplay();
 }
 
-// Function to reset all solenoids
-void clearBrailleDisplay() {
-  for (int i = 0; i < 6; i++) {
+void clearDisplay() {
+  for (int i = 0; i < 30; i++) digitalWrite(solenoidPins[i], LOW);
+}
+
+void resetMessage() {
+  msgLen = 0;
+  offsetIndex = 0;
+  clearDisplay();
+}
+
+void setup() {
+  Serial.begin(9600);
+  for (int i = 0; i < 30; i++) {
+    pinMode(solenoidPins[i], OUTPUT);
     digitalWrite(solenoidPins[i], LOW);
   }
+  pinMode(buttonPin, INPUT_PULLUP);
+  resetMessage();
+}
+
+void handleButton() {
+  int reading = digitalRead(buttonPin);
+
+  if (reading != lastButtonState) lastDebounceTime = millis();
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != buttonState) {
+      buttonState = reading;
+      if (buttonState == LOW) {
+        offsetIndex += 5;
+        if (offsetIndex >= msgLen) {
+          clearDisplay();
+        } else {
+          showWindow();
+        }
+      }
+    }
+  }
+
+  lastButtonState = reading;
+}
+
+void handleSerial() {
+  static int writePos = 0;
+
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    if (c == '\r') continue;
+
+    if (c == '\n') {
+      msg[writePos] = '\0';
+      msgLen = writePos;
+      offsetIndex = 0;
+      writePos = 0;
+      if (msgLen > 0) showWindow(); else clearDisplay();
+      return;
+    }
+
+    if (writePos < (int)sizeof(msg) - 1) {
+      msg[writePos++] = c;
+    }
+  }
+}
+
+void loop() {
+  handleSerial();
+  handleButton();
 }
