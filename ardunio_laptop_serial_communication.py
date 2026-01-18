@@ -1,40 +1,41 @@
 import serial
 import time
+import sys
 
-# Initialize the serial connection
-arduino = serial.Serial('COM3', 9600)  
-time.sleep(2)  # Time for Arduino to reset
+arduino = serial.Serial('COM3', 9600, timeout=1)
+time.sleep(2)
 
-def send_char_to_arduino(char):
-    """
-    Send a single character to the Arduino via serial communication.
-    """
-    arduino.write(char.encode())  # Convert character to bytes 
-    print(f"Sent: {char}")
+def send_message(message):
+    if not message.endswith("\n"):
+        message += "\n"
+    arduino.write(message.encode("utf-8", errors="ignore"))
+    arduino.flush()
 
 def main():
     try:
-        print("Braille Reader Communication Started!")
-        print("Type your message below. Type 'exit' to quit.\n")
-        
-        while True:
-            # Get user input
-            message = input("Enter a message: ")
-            
-            if message.lower() == 'exit':  # Exit the program
-                print("Exiting the Braille Reader.")
-                break
-            
-            # Send each character in the message to Arduino
-            for char in message:
-                send_char_to_arduino(char)
-                time.sleep(1)  # Delay between sending characters 
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        arduino.close()  # Close serial connection
-        print("Serial connection closed.")
+        print("Paste or type text. It will display 5 Braille cells at a time.")
+        print("Press the hardware button to advance to the next 5 characters.")
+        print("Type exit to quit.\n")
 
-# Run script
+        while True:
+            try:
+                message = input("Enter text: ")
+            except EOFError:
+                break
+
+            if message.strip().lower() == "exit":
+                break
+
+            send_message(message)
+            time.sleep(0.05)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            arduino.close()
+        except Exception:
+            pass
+
 if __name__ == "__main__":
     main()
